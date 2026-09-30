@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>music2servo · 可视化调参</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <h1>music2servo</h1>
+  <p class="sub">音乐 → 单舵机 PWM：高潮截取 · 四种映射 · 物理约束 · 尾巴动效</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>输入</h2>
+    <div class="row">
+      <label class="filePick">
+        <input type="file" id="file" accept=".mp3,.flac,.wav,.ogg,.m4a,.aac">
+        <span>选择本地音频</span>
+      </label>
+      <span class="hint">或服务端路径 / URL</span>
+      <input type="text" id="sourcePath" class="grow" placeholder="例如 /Users/me/song.mp3 或 https://…/song.mp3">
+    </div>
+    <div class="row">
+      <span class="label">映射模式</span>
+      <span id="modesRow" class="chips"></span>
+    </div>
+    <div class="row">
+      <button id="analyze">开始分析</button>
+      <button id="resetParams" class="ghost">恢复默认参数</button>
+      <span id="status" class="status"></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>参数配置</h2>
+    <p class="hint">留空表示沿用后端默认值。改动只影响映射 / 成形 / PWM 时，会复用已缓存的片段特征，不必重跑特征提取。</p>
+    <div id="configForm" class="config"></div>
+  </section>
+
+  <section class="panel">
+    <h2>整首分析</h2>
+    <div class="chart" id="chartWave"></div>
+    <div class="chart" id="chartScore"></div>
+    <p class="meta" id="clipMeta">尚未分析。</p>
+  </section>
+
+  <section class="panel">
+    <h2>片段：映射层与成形层</h2>
+    <div class="chart" id="chartShape"></div>
+    <div class="legend" id="legendShape"></div>
+  </section>
+
+  <section class="panel">
+    <h2>PWM 脉宽</h2>
+    <div class="chart" id="chartPwm"></div>
+    <div class="legend" id="legendPwm"></div>
+  </section>
+
+  <section class="panel">
+    <h2>尾巴动效</h2>
+    <div class="tailWrap">
+      <div class="tailStage" id="tailStage"></div>
+      <div class="tailSide">
+        <div class="row">
+          <span class="label">驱动模式</span>
+          <select id="tailMode"></select>
+        </div>
+        <div class="readouts">
+          <div class="readout"><span class="k">脉冲宽度</span><span class="v" id="rdPulse">—</span></div>
+          <div class="readout"><span class="k">角度</span><span class="v" id="rdAngle">—</span></div>
+          <div class="readout"><span class="k">归一化行程</span><span class="v" id="rdValue">—</span></div>
+          <div class="readout"><span class="k">片段进度</span><span class="v" id="rdTime">—</span></div>
+        </div>
+        <audio id="clip" controls preload="auto"></audio>
+        <p class="hint">播放的是被截取的那一段。尾巴按 50Hz PWM 帧的角度旋转，以音频播放位置为时钟，所以画面和声音严格对齐。</p>
+        <p><a id="csvLink" class="link" download>下载 PWM 帧序列 CSV</a></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
