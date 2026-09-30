@@ -1,0 +1,423 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-09-30T04:41:39.517660+00:00",
+  "scope": "documentation and evidence; no implementation changes",
+  "git_head": "3a02a26779104945ea12b187291d383d273db7d7",
+  "session_id": "01a0eca1-e787-7390-9459-289960f46874",
+  "source_sha256": {
+    "music2servo/__init__.py": "7324e19b48a4e16ba10bddc03e4752e7853b576f926325d237fecc822dfb4868",
+    "music2servo/__main__.py": "f3f8fae872668bb85a4776b353e15557f2d99c6953787ddf8ad83ea63a0c8327",
+    "music2servo/config.py": "fcef0b07276602ebad4937c9c34e9d447e2255df199dda9ead9f7c7be5e8c263",
+    "music2servo/features.py": "8d5bfe729d3c3a3ba0ccba01a150dfe92e7736eb88f150161f9a2ce4a18ed9a6",
+    "music2servo/mappers.py": "3a38bc5889d1162b682f986aa472e93c628fb6a467b1ab459932a8f0c1982f04",
+    "music2servo/pipeline.py": "e59297fed22fca650b283b6f40b5049c53bba630cb9585ee1f52a00712378cba",
+    "music2servo/pwm.py": "c03393e5403b4bd94d5a5cb2adf6dce97e1b53183b6dcbecd02bba0e42950f8a",
+    "music2servo/segment.py": "ee05899210ab098b61c6dbcc02891fa25deda71cf81f2c6ee3958df9647cfcd8",
+    "music2servo/shaping.py": "95e6953acaab2f7f34cba7c09db65fa76ba19f3656a87dd6b0f206aa0cf6d9e5",
+    "music2servo/source.py": "1abcbbd097bb084eb2836c9f73c2424f6f702ea49687cff32f1e323edadb37bc",
+    "music2servo/viz.py": "6324e92c52698baf602e70657ef919f118710dbfb3feacbe9fd7303f20d1d9cd",
+    "tools/verify_beat.py": "0816e19261a28c0cb2234ee99813ad0cba85ee102f5d619c521854282fedb14a",
+    "tools/verify_segment.py": "5cdb7c9c1327c1026f3469fa95fc3b5c99d994190eb45ce9be0ad589939617c4",
+    "web/__init__.py": "d84e4e353421437b4c572cc4e3eba5f558ab69a1ea0e2fcdc18767b0642d1095",
+    "web/report.py": "a27273742577ab9453334ce5a55bde336de822d3988602955c7b8793bab0761c",
+    "web/server.py": "cc68bdce0cc36ff4d47fa21aa72768ed99a19fe5da1c63add80bc9862c19675c",
+    "web/static/app.js": "1283516ed5c4dc913cf80eaee5734c3102c139fd02ece6fe3a9f27dd1d797083",
+    "web/static/index.html": "631d177265dd6b4b26fde5c336009eb66d09a8d7b7d7fd6675c0087f3ac313e3",
+    "web/static/style.css": "fcef8d0daec829b8ced0c50ec72eef2f86074c8e4b5f8c3aae82d445fb5fbec1"
+  },
+  "environment": {
+    "python": "3.13.5",
+    "numpy": true,
+    "scipy": true,
+    "soundfile": false
+  },
+  "algorithm_reruns": [
+    {
+      "name": "beat_and_units",
+      "method": "isolated original algorithm modules; package initialization skipped",
+      "session_reference_line": 202,
+      "python_source": "import json, sys, types, runpy\nfrom pathlib import Path\nimport numpy as np\nfrom scipy.signal import find_peaks\npkg=types.ModuleType('music2servo'); pkg.__path__=[str(Path('music2servo').resolve())]; sys.modules['music2servo']=pkg\nfrom music2servo import features, mappers, shaping, pwm\nfrom music2servo.config import MappingConfig, ShapingConfig, ServoConfig\nSR=22050; DUR=20.0\n\ndef synth(events, amps=None, bed=0.0):\n    n=int(SR*DUR); out=bed*np.sin(2*np.pi*440*np.arange(n)/SR)\n    size=int(.05*SR); t=np.arange(size)/SR\n    click=np.exp(-t*60)*(np.sin(2*np.pi*150*t)+.5*np.sin(2*np.pi*900*t))\n    amps=np.ones(len(events)) if amps is None else amps\n    for when,amp in zip(events,amps):\n        at=int(when*SR); stop=min(n,at+size)\n        if at>=0 and at<n: out[at:stop]+=amp*click[:stop-at]\n    out+=.002*np.random.default_rng(0).standard_normal(n)\n    return out.astype(np.float32)\n\ndef inspect(name,events,amps=None,bed=0.0,reference=None):\n    tr=features.extract(synth(events,amps,bed),SR)\n    cfg=MappingConfig(mode='beat'); grid=mappers.detect_beat_grid(tr,cfg)\n    record={'case':name,'pulse_count':len(events),'rms_spread_db':round(mappers._loudness_spread_db(tr.rms_db),3)}\n    if grid is None:\n        record['grid']=None; print(json.dumps(record)); return tr,None\n    period,phase=grid\n    predicted=np.arange(phase,DUR,period)\n    truth=np.asarray(events if reference is None else reference)\n    predicted=predicted[(predicted>=1)&(predicted<DUR-1)]\n    truth=truth[(truth>=1)&(truth<DUR-1)]\n    distances=np.abs(predicted[:,None]-truth[None,:])\n    raw=mappers.map_track(tr,cfg)\n    shaped=shaping.shape(raw,tr.hop_s,rescale=False)\n    peaks=np.sort(np.r_[find_peaks(shaped.values,prominence=.1)[0],find_peaks(-shaped.values,prominence=.1)[0]])\n    peak_times=shaped.times_s[peaks]; peak_times=peak_times[(peak_times>=1)&(peak_times<DUR-1)]\n    extrema_error=np.min(np.abs(peak_times[:,None]-truth[None,:]),axis=1)\n    record.update(bpm=round(60/period,3),predicted_count=len(predicted),truth_count=len(truth),grid_mae_ms=round(float(distances.min(axis=1).mean()*1000),2),grid_p95_ms=round(float(np.percentile(distances.min(axis=1),95)*1000),2),grid_precision_40ms=round(float(np.mean(distances.min(axis=1)<=.04)),3),grid_recall_40ms=round(float(np.mean(distances.min(axis=0)<=.04)),3),extrema_mae_ms=round(float(extrema_error.mean()*1000),2))\n    if name=='silent_break':\n        mask=(shaped.times_s>10.5)&(shaped.times_s<13.5)\n        record['silent_motion_peak']=round(float(np.max(np.abs(shaped.values[mask]))),4)\n    print(json.dumps(record)); return tr,grid\n\nfor bpm in (60,80,100,120,140,160,180,200):\n    inspect('fixed_'+str(bpm),np.arange(.37,DUR,60/bpm))\nbase=np.arange(.37,DUR,.5)\ninspect('alternate_strong_weak',base,np.where(np.arange(len(base))%2==0,1,.15))\ninspect('loud_sustained_bed_quiet_beat',base,np.full(len(base),.08),bed=.5)\ninspect('silent_break',base[(base<10)|(base>=14)])\nrng=np.random.default_rng(7); random_events=.37+np.r_[0,np.cumsum(rng.uniform(.32,.82,40))]; random_events=random_events[random_events<DUR]\ninspect('irregular_clicks',random_events)\nvariable=[];t=.37\nwhile t<DUR:\n    variable.append(t);t+=60/(100+40*t/DUR)\ninspect('ramp_100_to_140',np.array(variable))\nstep=[];t=.37\nwhile t<DUR:\n    step.append(t);t+=60/(100 if t<10 else 140)\ninspect('step_100_to_140',np.array(step))\ntr=features.extract(synth(base),SR)\nfor gain in (.5,1.0,1.5,2.0):\n    raw=mappers.map_track(tr,MappingConfig(mode='beat',gain=gain)); shaped=shaping.shape(raw,tr.hop_s,rescale=False)\n    indices=np.sort(np.r_[find_peaks(shaped.values,prominence=.1)[0],find_peaks(-shaped.values,prominence=.1)[0]])\n    times=shaped.times_s[indices]; times=times[(times>1)&(times<19)]\n    errors=np.min(abs(times[:,None]-base[None,:]),axis=1)\n    dt=1/25; angle=shaped.values*120; interior=(shaped.times_s[2:]>1)&(shaped.times_s[2:]<19)\n    acceleration=np.diff(angle,2)/dt**2\n    print(json.dumps({'case':'beat_gain','gain':gain,'neg':round(float(shaped.values.min()),4),'pos':round(float(shaped.values.max()),4),'extrema_mae_ms':round(float(errors.mean()*1000),2),'extrema_max_ms':round(float(errors.max()*1000),2),'target_acceleration_peak_deg_s2':round(float(np.max(np.abs(acceleration[interior]))),2)}))\nshaped=shaping.ShapedTrack(np.array([0,.5,1,1.5,2.0]),np.array([-1,-.5,0,.5,1]))\na=pwm.render(shaped,ServoConfig(angle_max_deg=120)); b=pwm.render(shaped,ServoConfig(angle_max_deg=60))\nprint(json.dumps({'case':'angle_parameter','pulse_equal_when_120_to_60':bool(np.array_equal(a.pulse_us,b.pulse_us)),'angle_peaks':[float(np.max(a.angle_deg)),float(np.max(b.angle_deg))]}))",
+      "exit_code": 0,
+      "results": [
+        {
+          "case": "fixed_60",
+          "pulse_count": 20,
+          "rms_spread_db": 41.635,
+          "bpm": 60.014,
+          "predicted_count": 18,
+          "truth_count": 18,
+          "grid_mae_ms": 7.32,
+          "grid_p95_ms": 9.1,
+          "grid_precision_40ms": 1.0,
+          "grid_recall_40ms": 1.0,
+          "extrema_mae_ms": 10.0
+        },
+        {
+          "case": "fixed_80",
+          "pulse_count": 27,
+          "rms_spread_db": 41.621,
+          "bpm": 80.012,
+          "predicted_count": 24,
+          "truth_count": 24,
+          "grid_mae_ms": 8.94,
+          "grid_p95_ms": 10.13,
+          "grid_precision_40ms": 1.0,
+          "grid_recall_40ms": 1.0,
+          "extrema_mae_ms": 10.0
+        },
+        {
+          "case": "fixed_100",
+          "pulse_count": 33,
+          "rms_spread_db": 41.635,
+          "bpm": 99.993,
+          "predicted_count": 30,
+          "truth_count": 30,
+          "grid_mae_ms": 8.62,
+          "grid_p95_ms": 9.14,
+          "grid_precision_40ms": 1.0,
+          "grid_recall_40ms": 1.0,
+          "extrema_mae_ms": 10.0
+        },
+        {
+          "case": "fixed_120",
+          "pulse_count": 40,
+          "rms_spread_db": 41.621,
+          "bpm": 120.013,
+          "predicted_count": 36,
+          "truth_count": 36,
+          "grid_mae_ms": 8.87,
+          "grid_p95_ms": 9.69,
+          "grid_precision_40ms": 1.0,
+          "grid_recall_40ms": 1.0,
+          "extrema_mae_ms": 10.0
+        },
+        {
+          "case": "fixed_140",
+          "pulse_count": 46,
+          "rms_spread_db": 41.604,
+          "bpm": 139.997,
+          "predicted_count": 42,
+          "truth_count": 42,
+          "grid_mae_ms": 9.09,
+          "grid_p95_ms": 9.29,
+          "grid_precision_40ms": 1.0,
+          "grid_recall_40ms": 1.0,
+          "extrema_mae_ms": 10.0
+        },
+        {
+          "case": "fixed_160",
+          "pulse_count": 53,
+          "rms_spread_db": 41.598,
+          "bpm": 160.026,
+          "predicted_count": 48,
+          "truth_count": 48,
+          "grid_mae_ms": 8.77,
+          "grid_p95_ms": 10.08,
+          "grid_precision_40ms": 1.0,
+          "grid_recall_40ms": 1.0,
+          "extrema_mae_ms": 10.0
+        },
+        {
+          "case": "fixed_180",
+          "pulse_count": 59,
+          "rms_spread_db": 41.601,
+          "bpm": 180.021,
+          "predicted_count": 54,
+          "truth_count": 54,
+          "grid_mae_ms": 8.78,
+          "grid_p95_ms": 9.68,
+          "grid_precision_40ms": 1.0,
+          "grid_recall_40ms": 1.0,
+          "extrema_mae_ms": 10.0
+        },
+        {
+          "case": "fixed_200",
+          "pulse_count": 66,
+          "rms_spread_db": 41.591,
+          "bpm": 199.992,
+          "predicted_count": 60,
+          "truth_count": 60,
+          "grid_mae_ms": 8.78,
+          "grid_p95_ms": 9.1,
+          "grid_precision_40ms": 1.0,
+          "grid_recall_40ms": 1.0,
+          "extrema_mae_ms": 10.0
+        },
+        {
+          "case": "alternate_strong_weak",
+          "pulse_count": 40,
+          "rms_spread_db": 41.611,
+          "bpm": 120.019,
+          "predicted_count": 36,
+          "truth_count": 36,
+          "grid_mae_ms": 8.29,
+          "grid_p95_ms": 9.56,
+          "grid_precision_40ms": 1.0,
+          "grid_recall_40ms": 1.0,
+          "extrema_mae_ms": 10.0
+        },
+        {
+          "case": "loud_sustained_bed_quiet_beat",
+          "pulse_count": 40,
+          "rms_spread_db": 0.034,
+          "grid": null
+        },
+        {
+          "case": "silent_break",
+          "pulse_count": 32,
+          "rms_spread_db": 41.643,
+          "bpm": 120.009,
+          "predicted_count": 36,
+          "truth_count": 28,
+          "grid_mae_ms": 284.32,
+          "grid_p95_ms": 1629.34,
+          "grid_precision_40ms": 0.778,
+          "grid_recall_40ms": 1.0,
+          "extrema_mae_ms": 285.56,
+          "silent_motion_peak": 0.4193
+        },
+        {
+          "case": "irregular_clicks",
+          "pulse_count": 35,
+          "rms_spread_db": 41.61,
+          "bpm": 96.664,
+          "predicted_count": 29,
+          "truth_count": 32,
+          "grid_mae_ms": 111.69,
+          "grid_p95_ms": 251.32,
+          "grid_precision_40ms": 0.241,
+          "grid_recall_40ms": 0.219,
+          "extrema_mae_ms": 104.95
+        },
+        {
+          "case": "ramp_100_to_140",
+          "pulse_count": 40,
+          "rms_spread_db": 41.629,
+          "bpm": 99.857,
+          "predicted_count": 30,
+          "truth_count": 35,
+          "grid_mae_ms": 124.06,
+          "grid_p95_ms": 241.55,
+          "grid_precision_40ms": 0.233,
+          "grid_recall_40ms": 0.2,
+          "extrema_mae_ms": 127.67
+        },
+        {
+          "case": "step_100_to_140",
+          "pulse_count": 40,
+          "rms_spread_db": 41.621,
+          "bpm": 130.736,
+          "predicted_count": 39,
+          "truth_count": 35,
+          "grid_mae_ms": 122.6,
+          "grid_p95_ms": 262.84,
+          "grid_precision_40ms": 0.205,
+          "grid_recall_40ms": 0.229,
+          "extrema_mae_ms": 122.01
+        },
+        {
+          "case": "beat_gain",
+          "gain": 0.5,
+          "neg": -0.2003,
+          "pos": 0.1998,
+          "extrema_mae_ms": 10.0,
+          "extrema_max_ms": 10.0,
+          "target_acceleration_peak_deg_s2": 2908.37
+        },
+        {
+          "case": "beat_gain",
+          "gain": 1.0,
+          "neg": -0.4205,
+          "pos": 0.4195,
+          "extrema_mae_ms": 10.0,
+          "extrema_max_ms": 10.0,
+          "target_acceleration_peak_deg_s2": 5041.72
+        },
+        {
+          "case": "beat_gain",
+          "gain": 1.5,
+          "neg": -0.4872,
+          "pos": 0.5058,
+          "extrema_mae_ms": 80.0,
+          "extrema_max_ms": 90.0,
+          "target_acceleration_peak_deg_s2": 11518.09
+        },
+        {
+          "case": "beat_gain",
+          "gain": 2.0,
+          "neg": -0.4911,
+          "pos": 0.4897,
+          "extrema_mae_ms": 119.71,
+          "extrema_max_ms": 130.0,
+          "target_acceleration_peak_deg_s2": 10682.05
+        },
+        {
+          "case": "angle_parameter",
+          "pulse_equal_when_120_to_60": true,
+          "angle_peaks": [
+            120.0,
+            60.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "center_and_velocity",
+      "method": "isolated original algorithm modules; package initialization skipped",
+      "session_reference_line": 288,
+      "python_source": "import sys, types, importlib, json\nfrom pathlib import Path\nimport numpy as np\nroot = Path.cwd()\npkg = types.ModuleType('music2servo'); pkg.__path__ = [str(root / 'music2servo')]; sys.modules['music2servo'] = pkg\nconfig, features, mappers, shaping, pwm, segment = [importlib.import_module('music2servo.' + n) for n in ['config','features','mappers','shaping','pwm','segment']]\nconst = shaping.shape(np.ones(150), 1/25, config.ShapingConfig(), rescale=False)\nprint(json.dumps({'unit_boundary_probe': {'raw':'constant +1, 150 samples, hop=40ms, rescale=False', 'first':float(const.values[0]),'last':float(const.values[-1]), 'max_step':float(np.max(np.abs(np.diff(const.values))))}}))\nsr=22050; seconds=6; t=np.arange(sr*seconds)/sr\nrng=np.random.default_rng(0)\ny=.12*np.sin(2*np.pi*220*t)+.001*rng.standard_normal(t.size)\nfor beat in np.arange(.37, seconds, .5):\n    p=t-beat; m=(p>=0)&(p<.08)\n    y[m]+=.65*np.exp(-p[m]*60)*(np.sin(2*np.pi*150*p[m])+.5*np.sin(2*np.pi*900*p[m]))\nsegment._apply_fade(y, config.SegmentConfig().fade_s, sr)\ntrack=features.extract(y,sr,config.AnalysisConfig())\nrows=[]\nfor mode in ['envelope','brightness','pitch','beat']:\n    raw=mappers.map_track(track, config.MappingConfig(mode=mode), 2.0)\n    result=shaping.shape(raw,track.hop_s,config.ShapingConfig(),rescale=(mode!='beat'))\n    rows.append({'mode':mode,'first':float(result.values[0]),'last':float(result.values[-1]),'min':float(result.values.min()),'max':float(result.values.max()),'max_step':float(np.max(np.abs(np.diff(result.values)))), 'end_s':float(result.times_s[-1])})\nprint(json.dumps({'synthetic_audio_probe':'6s 220Hz bed + 120BPM 80ms pulses; original fade and algorithms; no decoder, server or device', 'modes':rows}))",
+      "exit_code": 0,
+      "results": [
+        {
+          "unit_boundary_probe": {
+            "raw": "constant +1, 150 samples, hop=40ms, rescale=False",
+            "first": 0.0,
+            "last": 0.019999999999999657,
+            "max_step": 0.08000000000000002
+          }
+        },
+        {
+          "synthetic_audio_probe": "6s 220Hz bed + 120BPM 80ms pulses; original fade and algorithms; no decoder, server or device",
+          "modes": [
+            {
+              "mode": "envelope",
+              "first": -0.0,
+              "last": 0.0,
+              "min": -0.33073982235168936,
+              "max": 0.33162564334475275,
+              "max_step": 0.08000000000000002,
+              "end_s": 5.88
+            },
+            {
+              "mode": "brightness",
+              "first": 0.0,
+              "last": 0.0,
+              "min": -0.09788694794409665,
+              "max": 0.5998605039906554,
+              "max_step": 0.08000000000000002,
+              "end_s": 5.88
+            },
+            {
+              "mode": "pitch",
+              "first": 0.0,
+              "last": 0.006369089117231191,
+              "min": 0.0,
+              "max": 1.0,
+              "max_step": 0.08000000000000002,
+              "end_s": 5.88
+            },
+            {
+              "mode": "beat",
+              "first": -0.0,
+              "last": 0.0,
+              "min": -0.4194951624531846,
+              "max": 0.41763390872855566,
+              "max_step": 0.08000000000000002,
+              "end_s": 5.88
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "normalization_and_gain",
+      "method": "isolated original algorithm modules; package initialization skipped",
+      "session_reference_line": 221,
+      "python_source": "import json,sys,types\nfrom pathlib import Path\nimport numpy as np\npkg=types.ModuleType('music2servo');pkg.__path__=[str(Path('music2servo').resolve())];sys.modules['music2servo']=pkg\nfrom music2servo import features,mappers,shaping\nfrom music2servo.config import MappingConfig\nsr=22050;t=np.arange(sr*6)/sr;pcm=(.08*np.sin(2*np.pi*220*t)).astype(np.float32)\nfor when in np.arange(.37,6,.5):\n    start=int(when*sr);n=min(int(.05*sr),len(pcm)-start);local=np.arange(n)/sr\n    pcm[start:start+n]+=(np.exp(-60*local)*(np.sin(2*np.pi*150*local)+.5*np.sin(2*np.pi*900*local))).astype(np.float32)\ntrack=features.extract(pcm,sr)\nfor mode in ['envelope','brightness','pitch']:\n    a=mappers.map_track(track,MappingConfig(mode=mode,gain=1));b=mappers.map_track(track,MappingConfig(mode=mode,gain=.5))\n    shaped_a=shaping.shape(a,track.hop_s);shaped_b=shaping.shape(b,track.hop_s)\n    rescaled=shaping._percentile_rescale(a,2,98)\n    print(json.dumps({'mode':mode,'mapped_median':float(np.median(a)),'rescaled_median':float(np.median(rescaled)),'shaped_min':float(shaped_a.values.min()),'shaped_max':float(shaped_a.values.max()),'gain_1_vs_0_5_max_diff':float(np.max(abs(shaped_a.values-shaped_b.values)))}))\n",
+      "exit_code": 0,
+      "results": [
+        {
+          "mode": "envelope",
+          "mapped_median": -0.17900393303420525,
+          "rescaled_median": -0.2678395133566819,
+          "shaped_min": -0.5553277878958001,
+          "shaped_max": 0.0,
+          "gain_1_vs_0_5_max_diff": 0.0
+        },
+        {
+          "mode": "brightness",
+          "mapped_median": -0.09825733300269553,
+          "rescaled_median": -0.5014725887848911,
+          "shaped_min": -0.6995838468867509,
+          "shaped_max": -0.0,
+          "gain_1_vs_0_5_max_diff": 0.0
+        },
+        {
+          "mode": "pitch",
+          "mapped_median": -0.1989315288572962,
+          "rescaled_median": 0.9828267701014366,
+          "shaped_min": 0.0,
+          "shaped_max": 1.0,
+          "gain_1_vs_0_5_max_diff": 0.0
+        }
+      ]
+    }
+  ],
+  "historical_browser_probes": [
+    {
+      "session_line": 243,
+      "timestamp": "2026-09-30T03:46:52.410Z",
+      "method": "historical original frontend with synthetic report and silent browser audio; real backend not exercised",
+      "result": {
+        "before": {
+          "time": 2.455125,
+          "paused": false,
+          "src": "blob:http://music2servo.test/9566d855-ebbc-43b4-8f17-c30de3e87bf7"
+        },
+        "after": {
+          "time": 0,
+          "paused": true,
+          "events": [
+            {
+              "kind": "emptied",
+              "time": 0
+            },
+            {
+              "kind": "loadstart",
+              "time": 0
+            }
+          ],
+          "readyState": 4
+        },
+        "case": "resize original frontend during playback with fixture audio"
+      }
+    },
+    {
+      "session_line": 284,
+      "timestamp": "2026-09-30T03:50:52.149Z",
+      "method": "historical original frontend with synthetic report and silent browser audio; real backend not exercised",
+      "result": {
+        "fixtureOnly": true,
+        "sample": {
+          "time": 2.4,
+          "angles": {
+            "envelope": -13.35179,
+            "brightness": -28.42652,
+            "pitch": 67.59721,
+            "beat": 48.95912
+          }
+        },
+        "before": {
+          "mode": "envelope",
+          "time": 2.4,
+          "angle": "-13.4°",
+          "transform": "rotate(-13.35 200 187)"
+        },
+        "after": {
+          "mode": "pitch",
+          "time": 2.4,
+          "angle": "67.6°",
+          "transform": "rotate(67.60 200 187)"
+        }
+      }
+    }
+  ],
+  "not_verified": [
+    "file decoding",
+    "normal package entry points",
+    "HTTP analyze endpoints",
+    "real songs",
+    "full browser playback against real backend",
+    "hardware"
+  ]
+}

@@ -65,7 +65,7 @@
 
 ## 文档索引
 
-- [project-review.md](docs/project-review.md) —— 项目汇报、需求实现对照、问题复盘与后续开发事项（2026-09-29 快照，含现有文档与实现的差异）
+- [project-review.md](docs/project-review.md) —— 项目汇报、需求实现对照、问题复盘与后续开发事项（保留 2026-09-29 初审记录，增补 [2026-09-30 Web 模拟、节拍识别与舵机运动深入分析](docs/project-review.md#web-beat-servo-analysis)）
 - [architecture.md](docs/architecture.md) —— 分层职责、接口契约、关键设计决策与理由
 - [algorithms.md](docs/algorithms.md) —— 每层的算法与实现细节
 - [tuning.md](docs/tuning.md) —— 参数速查、验收判据、实测基线与调参发现
